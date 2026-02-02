@@ -12,7 +12,9 @@
     "@langchain/community": "^1.1.9",
     "@langchain/core": "^1.1.17",
     "@langchain/ollama": "^1.2.2",
+    "duck-duck-scrape": "^2.2.7",
     "langchain": "^1.2.15",
+    "lucide-react": "^0.563.0",
     "next": "16.1.6",
     "react": "19.2.3",
     "react-dom": "19.2.3"
