@@ -1,139 +1,127 @@
-"use client";
+'use client';
 
-import { useEffect, useRef, useState } from "react";
-import { Send } from "lucide-react";
+import { useState, useRef, useEffect } from 'react';
 
 type Message = {
-  role: "user" | "agent";
-  text?: string;
-  thinking?: boolean;
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  isTyping?: boolean;
 };
 
-export default function Page() {
-  const [messages, setMessages] = useState<Message[]>([
-    { role: "agent", text: "Hello 👋 Ask me anything." }
-  ]);
-  const [input, setInput] = useState("");
-  const [loading, setLoading] = useState(false);
-
-  const bottomRef = useRef<HTMLDivElement | null>(null);
+export default function Chat() {
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [input, setInput] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  const sendMessage = async () => {
-    if (!input.trim() || loading) return;
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!input.trim() || isLoading) return;
 
-    const userText = input;
-    setInput("");
-    setLoading(true);
+    const userMsg: Message = {
+      id: Date.now().toString(),
+      role: 'user',
+      content: input,
+    };
 
-    // 1️⃣ Add user message
+    setMessages(prev => [...prev, userMsg]);
+    setInput('');
+    setIsLoading(true);
+
+    const aiId = (Date.now() + 1).toString();
     setMessages(prev => [
       ...prev,
-      { role: "user", text: userText },
-      { role: "agent", thinking: true } // 2️⃣ thinking placeholder
+      { id: aiId, role: 'assistant', content: '', isTyping: true },
     ]);
 
     try {
-      const res = await fetch("/api/agent", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: userText })
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: [...messages, userMsg] }),
       });
 
-      const data = await res.json();
+      const reader = res.body?.getReader();
+      const decoder = new TextDecoder();
+      let text = '';
 
-      // 3️⃣ Replace thinking bubble with real answer
-      setMessages(prev => {
-        const updated = [...prev];
-        updated[updated.length - 1] = {
-          role: "agent",
-          text: data.reply || "No response."
-        };
-        return updated;
-      });
-    } catch {
-      setMessages(prev => {
-        const updated = [...prev];
-        updated[updated.length - 1] = {
-          role: "agent",
-          text: "❌ Error connecting to agent."
-        };
-        return updated;
-      });
+      while (true) {
+        const { value, done } = await reader!.read();
+        if (done) break;
+
+        text += decoder.decode(value);
+        setMessages(prev =>
+          prev.map(m =>
+            m.id === aiId
+              ? { ...m, content: text, isTyping: false }
+              : m
+          )
+        );
+      }
+    } catch (err) {
+      console.error(err);
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
   };
 
+  const TypingDots = () => (
+    <div className="flex gap-1">
+      <span className="w-2 h-2 bg-zinc-400 rounded-full animate-bounce" />
+      <span className="w-2 h-2 bg-zinc-400 rounded-full animate-bounce delay-150" />
+      <span className="w-2 h-2 bg-zinc-400 rounded-full animate-bounce delay-300" />
+    </div>
+  );
+
   return (
-    <div className="min-h-screen bg-black flex items-center justify-center p-6">
+    <div className="h-screen w-screen bg-black flex items-center justify-center p-4">
+      <div className="w-full max-w-2xl h-full bg-zinc-950 border border-zinc-800 rounded-3xl flex flex-col">
 
-      {/* Center Chat Card */}
-      <div className="w-full max-w-4xl h-[85vh] bg-[#0f0f0f] border border-gray-800 rounded-2xl flex flex-col">
-
-        {/* Header */}
-        <div className="border-b border-gray-800 px-6 py-4 text-gray-200 font-medium">
-          AI Assistant
+        <div className="p-4 border-b border-zinc-800 text-zinc-200 font-semibold">
+          IoTSolvez Customer Care Assistant
         </div>
 
-        {/* Messages */}
-        <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6">
-          {messages.map((msg, i) => (
+        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          {messages.map(m => (
             <div
-              key={i}
-              className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+              key={m.id}
+              className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}
             >
               <div
-                className={`max-w-[75%] rounded-xl px-4 py-3 text-sm leading-relaxed ${
-                  msg.role === "user"
-                    ? "bg-blue-600 text-white"
-                    : "bg-[#1e1e1e] text-gray-200"
+                className={`px-4 py-2 rounded-xl max-w-[80%] text-sm ${
+                  m.role === 'user'
+                    ? 'bg-white text-black'
+                    : 'bg-zinc-800 text-white'
                 }`}
               >
-                {msg.thinking ? <ThinkingDots /> : msg.text}
+                {m.isTyping ? <TypingDots /> : m.content}
               </div>
             </div>
           ))}
-
-          <div ref={bottomRef} />
+          <div ref={messagesEndRef} />
         </div>
 
-        {/* Input */}
-        <div className="border-t border-gray-800 p-4">
-          <div className="flex gap-3">
-            <input
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && sendMessage()}
-              placeholder={loading ? "AI is thinking..." : "Send a message..."}
-              disabled={loading}
-              className="flex-1 bg-[#1e1e1e] text-gray-200 placeholder-gray-500 rounded-lg px-4 py-3 outline-none border border-gray-700 focus:border-gray-500 disabled:opacity-50"
-            />
-            <button
-              onClick={sendMessage}
-              disabled={loading}
-              className="bg-blue-600 hover:bg-blue-700 px-4 rounded-lg flex items-center justify-center disabled:opacity-40"
-            >
-              <Send size={18} />
-            </button>
-          </div>
-        </div>
+        <form onSubmit={handleSubmit} className="p-4 border-t border-zinc-800 flex gap-2">
+          <input
+            className="flex-1 bg-zinc-900 text-white px-4 py-2 rounded-xl border border-zinc-700"
+            value={input}
+            onChange={e => setInput(e.target.value)}
+            placeholder="Ask IoTSolvez support..."
+          />
+          <button
+            disabled={isLoading}
+            className="bg-white text-black px-4 rounded-xl disabled:opacity-50"
+          >
+            Send
+          </button>
+        </form>
 
       </div>
-    </div>
-  );
-}
-
-/* 🔵 Thinking Dots Animation */
-function ThinkingDots() {
-  return (
-    <div className="flex gap-1">
-      <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:-0.3s]" />
-      <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:-0.15s]" />
-      <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" />
     </div>
   );
 }
